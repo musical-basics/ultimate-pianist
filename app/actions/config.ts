@@ -75,3 +75,24 @@ export async function uploadMidiAction(formData: FormData, configId: string): Pr
     if (!file) throw new Error('No file provided')
     return uploadMidi(file, configId)
 }
+
+export async function duplicateConfigAction(
+    sourceId: string,
+    newTitle: string
+): Promise<SongConfig> {
+    const source = await getConfigById(sourceId)
+    if (!source) throw new Error('Source config not found')
+
+    const newConfig = await createConfig(newTitle)
+    // Copy over all relevant fields
+    return updateConfig(newConfig.id, {
+        audio_url: source.audio_url,
+        xml_url: source.xml_url,
+        midi_url: source.midi_url,
+        anchors: source.anchors,
+        beat_anchors: source.beat_anchors,
+        subdivision: source.subdivision,
+        is_level2: source.is_level2,
+        ai_anchors: source.ai_anchors,
+    })
+}

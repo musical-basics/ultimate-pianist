@@ -49,6 +49,7 @@ export function useOSMD(
                 drawComposer: false,
                 drawLyricist: false,
                 backend: 'svg',
+                renderSingleHorizontalStaffline: true,
             })
 
             await osmd.load(url)

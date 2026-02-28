@@ -139,6 +139,33 @@ export default function AdminEditor() {
         }
     }
 
+    // ─── Save As ──────────────────────────────────────────────────
+    const handleSaveAs = async () => {
+        const newTitle = prompt('Enter a name for the copy:', `${title} (Copy)`)
+        if (!newTitle) return
+
+        try {
+            setSaving(true)
+            // First save current state
+            await updateConfigAction(configId, {
+                title,
+                anchors,
+                beat_anchors: beatAnchors,
+                subdivision,
+                is_level2: isLevel2Mode,
+            })
+            // Then duplicate
+            const { duplicateConfigAction } = await import('@/app/actions/config')
+            const newConfig = await duplicateConfigAction(configId, newTitle)
+            console.log('[Admin] Saved as:', newConfig.id)
+            router.push(`/admin/edit/${newConfig.id}`)
+        } catch (err) {
+            console.error('Save As failed:', err)
+        } finally {
+            setSaving(false)
+        }
+    }
+
     // ─── File Upload Handlers ─────────────────────────────────────
     const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -460,6 +487,17 @@ export default function AdminEditor() {
                         >
                             <Save className="w-3.5 h-3.5 mr-1" />
                             {saving ? 'Saving...' : 'Save'}
+                        </Button>
+
+                        {/* Save As */}
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleSaveAs}
+                            disabled={saving}
+                            className="border-zinc-600 text-zinc-300 hover:text-white"
+                        >
+                            Save As
                         </Button>
                     </div>
                 </div>
