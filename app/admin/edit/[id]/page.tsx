@@ -235,6 +235,20 @@ export default function AdminEditor() {
         }
     }
 
+    // ─── Spacebar shortcut ────────────────────────────────────────
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.code !== 'Space') return
+            // Don't trigger when typing in inputs
+            const tag = (e.target as HTMLElement)?.tagName
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+            e.preventDefault()
+            handlePlayPause()
+        }
+        window.addEventListener('keydown', onKeyDown)
+        return () => window.removeEventListener('keydown', onKeyDown)
+    }, [isPlaying])
+
     const handleSeek = useCallback((time: number) => {
         const pm = getPlaybackManager()
         pm.seek(time)
