@@ -151,7 +151,7 @@ export const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
                 </div>
             </div>
 
-            <div ref={containerRef} className="flex-1 overflow-x-auto relative min-h-0" style={{ height: '120px' }}>
+            <div ref={containerRef} className="overflow-x-auto relative" style={{ height: '120px' }}>
                 <canvas ref={canvasRef} className="absolute left-0 top-0 cursor-text" onMouseDown={handleContainerClick} />
                 <div ref={playbackCursorRef} className="absolute top-0 bottom-0 w-[2px] bg-blue-500 z-30 pointer-events-none transition-none" style={{ left: 0, willChange: 'transform' }} />
 
