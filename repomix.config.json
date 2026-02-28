@@ -1,0 +1,22 @@
+{
+    "output": {
+        "filePath": "repomix-output.xml",
+        "style": "xml"
+    },
+    "ignore": {
+        "useGitignore": true,
+        "useDefaultPatterns": true,
+        "customPatterns": [
+            "node_modules",
+            ".next",
+            ".git",
+            "pnpm-lock.yaml",
+            "*.xml",
+            "score-repomix-output.xml",
+            "synth-repomix-output.xml",
+            "repomix-output.xml",
+            ".env.local",
+            "migrations/**"
+        ]
+    }
+}
