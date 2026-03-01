@@ -22,6 +22,7 @@ interface AnchorSidebarProps {
     onTap?: () => void
     onClearAll?: () => void
     onAutoMap?: () => void
+    onAutoMapV4?: () => void
     isAiMapping?: boolean
 }
 
@@ -42,6 +43,7 @@ export const AnchorSidebar: React.FC<AnchorSidebarProps> = ({
     onTap,
     onClearAll,
     onAutoMap,
+    onAutoMapV4,
     isAiMapping = false,
 }) => {
     const bg = darkMode ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-900'
@@ -184,7 +186,17 @@ export const AnchorSidebar: React.FC<AnchorSidebarProps> = ({
                             disabled={isAiMapping}
                             className="col-span-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-[0_0_10px_rgba(79,70,229,0.3)] text-xs h-8 transition-all disabled:opacity-50"
                         >
-                            {isAiMapping ? '🧠 AI Processing...' : '✨ Auto-Map (v3)'}
+                            {isAiMapping ? '🧠 AI Processing...' : '✨ AI Auto-Map (v3)'}
+                        </Button>
+                    )}
+                    {onAutoMapV4 && (
+                        <Button
+                            size="sm"
+                            onClick={onAutoMapV4}
+                            disabled={isAiMapping}
+                            className="col-span-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-[0_0_10px_rgba(16,185,129,0.3)] text-xs h-8 transition-all disabled:opacity-50"
+                        >
+                            {isAiMapping ? '⏱️ Processing...' : '🎯 Note-by-Note Heuristic (v4)'}
                         </Button>
                     )}
                 </div>

@@ -4,7 +4,7 @@ import * as React from 'react'
 import { useRef, useEffect, useCallback, useState, memo } from 'react'
 import { useOSMD } from '@/hooks/useOSMD'
 import { getPlaybackManager } from '@/lib/engine/PlaybackManager'
-import type { Anchor, BeatAnchor } from '@/lib/types'
+import type { Anchor, BeatAnchor, XMLEvent } from '@/lib/types'
 
 interface ScrollViewProps {
     xmlUrl: string | null
@@ -26,7 +26,7 @@ interface ScrollViewProps {
     onMeasureChange?: (measure: number) => void
     onUpdateAnchor?: (measure: number, time: number) => void
     onUpdateBeatAnchor?: (measure: number, beat: number, time: number) => void
-    onScoreLoaded?: (totalMeasures: number, noteCounts: Map<number, number>) => void
+    onScoreLoaded?: (totalMeasures: number, noteCounts: Map<number, number>, xmlEvents?: XMLEvent[]) => void
 }
 
 type NoteData = {
@@ -133,22 +133,28 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
         const newMeasureXMap = new Map<number, number>()
         const newBeatXMap = new Map<number, Map<number, number>>()
 
+        const xmlEventsList: XMLEvent[] = []
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         measureList.forEach((staves: any[], index: number) => {
             const measureNumber = index + 1
+            const sourceMeasure = instance.Sheet.SourceMeasures[index]
+            const numerator = sourceMeasure?.ActiveTimeSignature ? sourceMeasure.ActiveTimeSignature.Numerator : 4
+
+            const beatPositions = new Map<number, number>()
+            const uniqueFractionalBeats = new Set<number>()
+
             if (staves.length > 0) {
                 const pos = staves[0].PositionAndShape
                 const absoluteX = (pos.AbsolutePosition.x + pos.BorderLeft) * unitInPixels
                 newMeasureXMap.set(measureNumber, absoluteX)
 
-                try {
-                    const sourceMeasure = instance.Sheet.SourceMeasures[index]
-                    const numerator = sourceMeasure?.ActiveTimeSignature ? sourceMeasure.ActiveTimeSignature.Numerator : 4
-                    const beatPositions = new Map<number, number>()
-                    const mStart = (pos.AbsolutePosition.x + pos.BorderLeft) * unitInPixels
-                    const mEnd = (pos.AbsolutePosition.x + pos.BorderRight) * unitInPixels
-                    const mWidth = mEnd - mStart
+                const mStart = (pos.AbsolutePosition.x + pos.BorderLeft) * unitInPixels
+                const mEnd = (pos.AbsolutePosition.x + pos.BorderRight) * unitInPixels
+                const mWidth = mEnd - mStart
 
+                try {
+                    // Fallback integer beats (linear spread)
                     for (let b = 1; b <= numerator; b++) {
                         const targetFraction = (b - 1) / numerator
                         let bestX = mStart + (mWidth * targetFraction)
@@ -167,7 +173,43 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                         })
                         beatPositions.set(b, bestX)
                     }
+
+                    // Explicit fractional beats derived exactly from XML notes
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    staves.forEach((staffMeasure: any) => {
+                        const staffMWidth = staffMeasure.PositionAndShape.BorderRight - staffMeasure.PositionAndShape.BorderLeft;
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        staffMeasure.staffEntries.forEach((entry: any) => {
+                            // Verify it's a real note, not a rest
+                            let isRest = true;
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            entry.graphicalVoiceEntries?.forEach((gve: any) => {
+                                if (gve.notes) {
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    gve.notes.forEach((n: any) => {
+                                        if (n.sourceNote && n.sourceNote.Pitch) isRest = false;
+                                    });
+                                }
+                            });
+                            if (isRest) return;
+
+                            const relX = entry.PositionAndShape.RelativePosition.x;
+                            let beatVal = 1 + ((staffMWidth > 0 ? relX / staffMWidth : 0) * numerator);
+                            beatVal = Math.round(beatVal * 1000) / 1000;
+                            uniqueFractionalBeats.add(beatVal);
+
+                            const absX = (staffMeasure.PositionAndShape.AbsolutePosition.x + relX) * unitInPixels;
+                            // Map the exact fractional beat directly to the pixel coordinates!
+                            beatPositions.set(beatVal, absX);
+                        });
+                    });
+
                     newBeatXMap.set(measureNumber, beatPositions)
+
+                    // Add to chronological XML Events List for V4 Mapper
+                    const sortedBeats = Array.from(uniqueFractionalBeats).sort((a, b) => a - b);
+                    sortedBeats.forEach(b => xmlEventsList.push({ measure: measureNumber, beat: b }));
+
                 } catch { /* ignore */ }
             }
 
@@ -266,8 +308,8 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
             newNoteMap.forEach((notes, measureIndex) => {
                 counts.set(measureIndex, notes.length)
             })
-            console.log(`[ScrollView v2.0] Passed Score Data up to Admin: ${measureList.length} measures.`)
-            onScoreLoaded(measureList.length, counts)
+            console.log(`[ScrollView v4.0] Exported ${xmlEventsList.length} exact XML note events for mapping.`)
+            onScoreLoaded(measureList.length, counts, xmlEventsList)
         }
 
     }, [osmd, onScoreLoaded])

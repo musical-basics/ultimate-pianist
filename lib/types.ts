@@ -49,6 +49,12 @@ export interface BeatAnchor {
     time: number
 }
 
+/** An exact rhythmic event extracted from MusicXML */
+export interface XMLEvent {
+    measure: number
+    beat: number
+}
+
 /** A full song configuration (stored in DB) */
 export interface SongConfig {
     id: string

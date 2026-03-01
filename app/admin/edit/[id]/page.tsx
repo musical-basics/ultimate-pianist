@@ -12,9 +12,8 @@ import { ScoreControls } from '@/components/score/ScoreControls'
 import { useAppStore } from '@/lib/store'
 import { getPlaybackManager } from '@/lib/engine/PlaybackManager'
 import { parseMidiFile } from '@/lib/midi/parser'
-import type { SongConfig, ParsedMidi, BeatAnchor } from '@/lib/types'
+import type { SongConfig, ParsedMidi, BeatAnchor, XMLEvent } from '@/lib/types'
 import { fetchConfigById, updateConfigAction } from '@/app/actions/config'
-import { autoMapMidiToScore } from '@/lib/engine/AutoMapper'
 
 export default function AdminEditor() {
     const params = useParams()
@@ -31,6 +30,7 @@ export default function AdminEditor() {
     const [nextMeasure, setNextMeasure] = useState(2)
     const [totalMeasures, setTotalMeasures] = useState(0)
     const [noteCounts, setNoteCounts] = useState<Map<number, number>>(new Map())
+    const [xmlEvents, setXmlEvents] = useState<XMLEvent[]>([])
 
     const anchors = useAppStore((s) => s.anchors)
     const beatAnchors = useAppStore((s) => s.beatAnchors)
@@ -259,9 +259,10 @@ export default function AdminEditor() {
         }
     }, [setAnchors, setBeatAnchors])
 
-    const handleScoreLoaded = useCallback((total: number, counts: Map<number, number>) => {
+    const handleScoreLoaded = useCallback((total: number, counts: Map<number, number>, events?: XMLEvent[]) => {
         setTotalMeasures(total)
         setNoteCounts(counts)
+        if (events) setXmlEvents(events)
     }, [])
 
     const handleAutoMap = useCallback(async () => {
@@ -274,7 +275,7 @@ export default function AdminEditor() {
             return
         }
 
-        if (confirm('Run AI-assisted Auto-Map?\n\nThis uses the local heuristic algorithm to establish a baseline, then sends it to Gemini to intelligently adjust for ritardandos/rubatos. This overwrites existing anchors.')) {
+        if (confirm('Run AI-assisted Auto-Map?\n\nThis uses the local heuristic algorithm to establish a baseline, then sends it to Gemini to intelligently adjust for ritardandos/rubatos.')) {
             setIsAiMapping(true)
             try {
                 // 1. Calculate Mathematical Baseline Heuristic (Locally)
@@ -319,6 +320,35 @@ export default function AdminEditor() {
         }
     }, [parsedMidi, noteCounts, totalMeasures, setAnchors, setBeatAnchors])
 
+    // V4: Note-by-Note Explicit Rhythmic Mapping
+    const handleAutoMapV4 = useCallback(async () => {
+        if (!parsedMidi) { alert('Please load a MIDI file first.'); return; }
+        if (totalMeasures === 0 || xmlEvents.length === 0) { alert('Please wait for score to process.'); return; }
+
+        if (confirm('Run V4 Note-By-Note Auto-Map?\n\nThis will detect the audio offset, extract rhythmic chords from both MIDI and XML, and map them 1:1.')) {
+            setIsAiMapping(true);
+            try {
+                const { autoMapByNoteV4, getAudioOffset } = await import('@/lib/engine/AutoMapper');
+                const audioOffset = await getAudioOffset(config?.audio_url || null);
+
+                const { anchors: newAnchors, beatAnchors: newBeatAnchors } = autoMapByNoteV4(
+                    parsedMidi.notes, xmlEvents, totalMeasures, audioOffset
+                );
+
+                if (newAnchors.length > 0) {
+                    setAnchors(newAnchors);
+                    setBeatAnchors(newBeatAnchors);
+                    setIsLevel2Mode(true); // Force Level 2 mode ON so the fractional beat anchors are used!
+                }
+            } catch (err) {
+                console.error(err);
+                alert('V4 mapping failed.');
+            } finally {
+                setIsAiMapping(false);
+            }
+        }
+    }, [parsedMidi, xmlEvents, totalMeasures, config?.audio_url, setAnchors, setBeatAnchors, setIsLevel2Mode]);
+
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
             const tag = (e.target as HTMLElement)?.tagName
@@ -353,7 +383,7 @@ export default function AdminEditor() {
                 anchors={anchors}
                 beatAnchors={beatAnchors}
                 currentMeasure={currentMeasure}
-                totalMeasures={100}
+                totalMeasures={totalMeasures || 100}
                 isLevel2Mode={isLevel2Mode}
                 subdivision={subdivision}
                 darkMode={darkMode}
@@ -366,6 +396,7 @@ export default function AdminEditor() {
                 onTap={handleTap}
                 onClearAll={handleClearAll}
                 onAutoMap={handleAutoMap}
+                onAutoMapV4={handleAutoMapV4}
                 isAiMapping={isAiMapping}
             />
 

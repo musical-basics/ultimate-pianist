@@ -8,7 +8,7 @@ import { useAppStore } from '@/lib/store'
 import { getPlaybackManager } from '@/lib/engine/PlaybackManager'
 import { AudioSynth } from '@/lib/engine/AudioSynth'
 import type { WaterfallRenderer } from '@/lib/engine/WaterfallRenderer'
-import type { ParsedMidi } from '@/lib/types'
+import type { ParsedMidi, XMLEvent } from '@/lib/types'
 
 interface SplitScreenLayoutProps {
     audioUrl: string | null
@@ -17,7 +17,7 @@ interface SplitScreenLayoutProps {
     isAdmin?: boolean
     onUpdateAnchor?: (measure: number, time: number) => void
     onUpdateBeatAnchor?: (measure: number, beat: number, time: number) => void
-    onScoreLoaded?: (totalMeasures: number, noteCounts: Map<number, number>) => void
+    onScoreLoaded?: (totalMeasures: number, noteCounts: Map<number, number>, xmlEvents?: XMLEvent[]) => void
     children?: React.ReactNode
 }
 
