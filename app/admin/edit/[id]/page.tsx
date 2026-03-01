@@ -27,6 +27,7 @@ export default function AdminEditor() {
     const [parsedMidi, setParsedMidi] = useState<ParsedMidi | null>(null)
     const [title, setTitle] = useState('')
     const [isRecording, setIsRecording] = useState(false)
+    const [isAiMapping, setIsAiMapping] = useState(false)
     const [nextMeasure, setNextMeasure] = useState(2)
     const [totalMeasures, setTotalMeasures] = useState(0)
     const [noteCounts, setNoteCounts] = useState<Map<number, number>>(new Map())
@@ -263,7 +264,7 @@ export default function AdminEditor() {
         setNoteCounts(counts)
     }, [])
 
-    const handleAutoMap = useCallback(() => {
+    const handleAutoMap = useCallback(async () => {
         if (!parsedMidi) {
             alert('Please load a MIDI file first.')
             return
@@ -272,13 +273,48 @@ export default function AdminEditor() {
             alert('Please wait for the MusicXML score to finish processing.')
             return
         }
-        if (confirm('Auto-map using MIDI analysis? This will overwrite existing anchors.')) {
-            const newAnchors = autoMapMidiToScore(parsedMidi.notes, noteCounts, totalMeasures)
-            if (newAnchors.length > 0) {
-                setAnchors(newAnchors)
-                setBeatAnchors([]) // Clear beats since measure boundaries moved
-            } else {
-                alert('Could not generate anchors from MIDI.')
+
+        if (confirm('Run AI-assisted Auto-Map?\n\nThis uses the local heuristic algorithm to establish a baseline, then sends it to Gemini to intelligently adjust for ritardandos/rubatos. This overwrites existing anchors.')) {
+            setIsAiMapping(true)
+            try {
+                // 1. Calculate Mathematical Baseline Heuristic (Locally)
+                const { autoMapMidiToScore } = await import('@/lib/engine/AutoMapper')
+                const baseline = autoMapMidiToScore(parsedMidi.notes, noteCounts, totalMeasures)
+
+                // 2. Compress MIDI into clusters (saves tokens, makes AI reasoning easier)
+                const simplifiedMidi = parsedMidi.notes.map(n => ({
+                    t: Number(n.startTimeSec.toFixed(3)),
+                    p: n.pitch
+                }))
+
+                // Convert ES6 Map to plain object for JSON transmission
+                const expectedCountsObj: Record<number, number> = {}
+                noteCounts.forEach((count, measure) => {
+                    expectedCountsObj[measure] = count
+                })
+
+                // 3. Send to Gemini for intelligent correction
+                const { generateAiAnchors } = await import('@/app/actions/ai')
+                const aiAnchors = await generateAiAnchors(totalMeasures, expectedCountsObj, baseline, simplifiedMidi)
+
+                if (aiAnchors && aiAnchors.length > 0) {
+                    setAnchors(aiAnchors)
+                    setBeatAnchors([]) // Clear beats since measure boundaries shifted
+                } else {
+                    alert('AI returned an empty mapping. Falling back to heuristic.')
+                    setAnchors(baseline)
+                    setBeatAnchors([])
+                }
+            } catch (err) {
+                console.error('[AI Map Error]', err)
+                alert('AI mapping failed (check console/API key). Falling back to pure heuristic baseline.')
+                // 4. Graceful Fallback to pure heuristic
+                const { autoMapMidiToScore } = await import('@/lib/engine/AutoMapper')
+                const heuristicAnchors = autoMapMidiToScore(parsedMidi.notes, noteCounts, totalMeasures)
+                setAnchors(heuristicAnchors)
+                setBeatAnchors([])
+            } finally {
+                setIsAiMapping(false)
             }
         }
     }, [parsedMidi, noteCounts, totalMeasures, setAnchors, setBeatAnchors])
@@ -330,6 +366,7 @@ export default function AdminEditor() {
                 onTap={handleTap}
                 onClearAll={handleClearAll}
                 onAutoMap={handleAutoMap}
+                isAiMapping={isAiMapping}
             />
 
             <div className="flex-1 flex flex-col overflow-hidden">

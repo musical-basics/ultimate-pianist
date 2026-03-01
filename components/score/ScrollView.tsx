@@ -186,8 +186,8 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                         if (!gve.notes) return
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         gve.notes.forEach((note: any) => {
-                            // isRest is a method on OSMD Note, not a property
-                            if (note.sourceNote && (note.sourceNote.isRestFlag || (typeof note.sourceNote.isRest === 'function' && note.sourceNote.isRest()))) return
+                            // Foolproof rest check: OSMD rests do not have a Pitch defined. 
+                            if (note.sourceNote && !note.sourceNote.Pitch) return
 
                             if (note.vfnote && note.vfnote.length > 0) {
                                 const vfId = note.vfnote[0].attrs?.id
