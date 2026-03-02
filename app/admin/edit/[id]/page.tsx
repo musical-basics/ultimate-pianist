@@ -264,7 +264,10 @@ export default function AdminEditor() {
     const handleScoreLoaded = useCallback((total: number, counts: Map<number, number>, events?: XMLEvent[]) => {
         setTotalMeasures(total)
         setNoteCounts(counts)
-        if (events) setXmlEvents(events)
+        // Only set xmlEvents on first load — don't let V5-triggered re-renders overwrite them
+        if (events && events.length > 0) {
+            setXmlEvents(prev => prev.length === 0 ? events : prev)
+        }
     }, [])
 
     const handleAutoMap = useCallback(async () => {
