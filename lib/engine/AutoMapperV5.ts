@@ -203,6 +203,7 @@ export function stepV5(
     // If 3+ consecutive non-matches (dead-reckons/strays), switch to fresh scanning.
     // This handles fermatas, ritardandos, and any timing disruption dynamically.
     if (state.consecutiveMisses >= 3) {
+        console.log(`[V5] 🔍 Fresh scan activated (${state.consecutiveMisses} consecutive misses). Looking for M${xmlEvent.measure} B${xmlEvent.beat} pitches=[${xmlEvent.pitches}] from midiCursor=${state.midiCursor}`)
         const freshMatch = findFirstPitchMatch(xmlEvent.pitches, sorted, state.midiCursor)
 
         if (freshMatch) {
@@ -234,6 +235,8 @@ export function stepV5(
                 recentOutcomes: pushOutcome(state.recentOutcomes, 'match'),
                 status: nextIndex >= xmlEvents.length ? 'done' : 'running',
             }
+        } else {
+            console.log(`[V5] 🔍 Fresh scan found NO match for pitches=[${xmlEvent.pitches}]. Falling through to normal flow.`)
         }
         // No fresh match either — continue to normal flow (will dead-reckon or pause)
     }
@@ -256,8 +259,7 @@ export function stepV5(
         const matchRatio = matchedCount / expectedCount
 
         if (expectedCount >= 3 && matchRatio < 0.5) {
-            // Stray note — not enough pitches matched. Skip past it.
-            console.warn(`[V5] ⚠ Stray note at M${xmlEvent.measure} B${xmlEvent.beat}: only ${matchedCount}/${expectedCount} pitches matched (${chord.notes.map(n => n.pitch).join(',')}). Skipping.`)
+            console.warn(`[V5] ⚠ Stray note at M${xmlEvent.measure} B${xmlEvent.beat}: only ${matchedCount}/${expectedCount} pitches matched (${chord.notes.map(n => n.pitch).join(',')}). Skipping. [misses=${state.consecutiveMisses + 1}]`)
 
             // Track outcome and check for runaway
             const outcomes = pushOutcome(state.recentOutcomes, 'stray')
@@ -375,7 +377,7 @@ export function stepV5(
 
             // Only dead-reckon if the gap is small (≤ 2 beats) — otherwise pause for user
             if (nextBeatsElapsed <= 2) {
-                console.log(`[V5] ⏩ Dead-reckon M${xmlEvent.measure} B${xmlEvent.beat} → ${deadReckonTime.toFixed(3)}s (no onset, skipping)`)
+                console.log(`[V5] ⏩ Dead-reckon M${xmlEvent.measure} B${xmlEvent.beat} → ${deadReckonTime.toFixed(3)}s (no onset, skipping) [misses=${state.consecutiveMisses + 1}]`)
 
                 // Track outcome and check for runaway
                 const outcomes = pushOutcome(state.recentOutcomes, 'dead-reckon')
