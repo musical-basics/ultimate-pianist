@@ -85,8 +85,8 @@ export interface V5MapperState {
     lastAnchorGlobalBeat: number
     /** Recent event outcomes for runaway detection */
     recentOutcomes: ('match' | 'dead-reckon' | 'stray')[]
-    /** Whether we just passed a fermata beat and need fresh scanning */
-    afterFermata?: boolean
+    /** Consecutive non-match count — after 3+ triggers fresh scanning mode */
+    consecutiveMisses: number
 }
 
 /** A full song configuration (stored in DB) */

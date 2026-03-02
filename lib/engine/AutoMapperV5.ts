@@ -112,6 +112,7 @@ export function initV5(
         lastAnchorTime: 0,
         lastAnchorGlobalBeat: 0,
         recentOutcomes: [],
+        consecutiveMisses: 0,
     }
 
     if (midiNotes.length === 0 || xmlEvents.length === 0) {
@@ -198,14 +199,14 @@ export function stepV5(
     const searchStart = state.lastAnchorTime - buffer * 0.5 // Allow slight early arrival
     const searchEnd = state.lastAnchorTime + expectedDelta + buffer
 
-    // ─── AFTER-FERMATA FRESH SCAN ───
-    // If we just passed a fermata beat, ignore AQNTL window and do a fresh pitch search
-    // This handles the unpredictable duration of fermatas
-    if (state.afterFermata) {
+    // ─── CONSECUTIVE MISS FRESH SCAN ───
+    // If 3+ consecutive non-matches (dead-reckons/strays), switch to fresh scanning.
+    // This handles fermatas, ritardandos, and any timing disruption dynamically.
+    if (state.consecutiveMisses >= 3) {
         const freshMatch = findFirstPitchMatch(xmlEvent.pitches, sorted, state.midiCursor)
 
         if (freshMatch) {
-            // Found a match anywhere ahead — use it
+            // Found a match anywhere ahead — re-sync!
             const chordThreshold = Math.max(0.100, state.aqntl * state.chordThresholdFraction)
             const chord = extractChord(xmlEvent.pitches, sorted, freshMatch.index, freshMatch.time, chordThreshold)
 
@@ -217,48 +218,24 @@ export function stepV5(
 
             const nextIndex = state.currentEventIndex + 1
 
-            console.log(`[V5] 🎵 Post-fermata fresh match M${xmlEvent.measure} B${xmlEvent.beat} → ${freshMatch.time.toFixed(3)}s | pitches=[${chord.notes.map(n => n.pitch)}]`)
+            console.log(`[V5] 🔄 Fresh-scan re-sync M${xmlEvent.measure} B${xmlEvent.beat} → ${freshMatch.time.toFixed(3)}s | pitches=[${chord.notes.map(n => n.pitch)}] (after ${state.consecutiveMisses} misses)`)
 
             return {
                 ...state,
                 anchors: newAnchors,
                 beatAnchors: newBeatAnchors,
                 ghostAnchor: null,
-                aqntl: state.aqntl, // Don't update AQNTL from fermata gap
+                aqntl: state.aqntl, // Don't update AQNTL from disrupted timing
                 midiCursor: chord.lastIndex + 1,
                 currentEventIndex: nextIndex,
                 lastAnchorTime: freshMatch.time,
                 lastAnchorGlobalBeat: xmlEvent.globalBeat,
-                afterFermata: false, // Re-synced, back to normal scanning
+                consecutiveMisses: 0, // Re-synced!
                 recentOutcomes: pushOutcome(state.recentOutcomes, 'match'),
                 status: nextIndex >= xmlEvents.length ? 'done' : 'running',
             }
-        } else {
-            // No fresh match — dead-reckon this beat (held note under fermata)
-            const deadReckonTime = state.lastAnchorTime + expectedDelta
-            const nextIndex = state.currentEventIndex + 1
-
-            console.log(`[V5] 🎵 Post-fermata dead-reckon M${xmlEvent.measure} B${xmlEvent.beat} → ${deadReckonTime.toFixed(3)}s (no onset under fermata)`)
-
-            const newAnchors = [...state.anchors]
-            const newBeatAnchors = [...state.beatAnchors]
-            const isNewMeasure = state.anchors.length === 0 || state.anchors[state.anchors.length - 1].measure !== xmlEvent.measure
-            if (isNewMeasure) newAnchors.push({ measure: xmlEvent.measure, time: deadReckonTime })
-            if (xmlEvent.beat > 1.01) newBeatAnchors.push({ measure: xmlEvent.measure, beat: xmlEvent.beat, time: deadReckonTime })
-
-            return {
-                ...state,
-                anchors: newAnchors,
-                beatAnchors: newBeatAnchors,
-                ghostAnchor: null,
-                currentEventIndex: nextIndex,
-                lastAnchorTime: deadReckonTime,
-                lastAnchorGlobalBeat: xmlEvent.globalBeat,
-                // Keep afterFermata = true until we find a real match
-                recentOutcomes: pushOutcome(state.recentOutcomes, 'dead-reckon'),
-                status: nextIndex >= xmlEvents.length ? 'done' : 'running',
-            }
         }
+        // No fresh match either — continue to normal flow (will dead-reckon or pause)
     }
 
     // Scan for pitch matches in window
@@ -295,10 +272,10 @@ export function stepV5(
                 }
             }
 
-            // Advance midiCursor past the stray note and try again
             return {
                 ...state,
                 recentOutcomes: outcomes,
+                consecutiveMisses: state.consecutiveMisses + 1,
                 midiCursor: chord.lastIndex + 1,
                 // Don't advance currentEventIndex — re-try this same XML event
             }
@@ -320,16 +297,13 @@ export function stepV5(
         }
 
         // Update AQNTL with exponential moving average (70/30 smoothing)
-        // Skip AQNTL update if this beat has a fermata (performer slowed down, would corrupt tempo)
         const actualDelta = anchorTime - state.lastAnchorTime
         const instantAqntl = actualDelta / beatsElapsed
-        const newAqntl = xmlEvent.hasFermata
-            ? state.aqntl  // Preserve current AQNTL for fermata beats
-            : (state.aqntl * 0.7) + (instantAqntl * 0.3)
+        const newAqntl = (state.aqntl * 0.7) + (instantAqntl * 0.3)
 
         const nextIndex = state.currentEventIndex + 1
 
-        console.log(`[V5] ✓ M${xmlEvent.measure} B${xmlEvent.beat} → ${anchorTime.toFixed(3)}s | matched ${matchedCount}/${expectedCount} pitches=[${chord.notes.map(n => n.pitch)}] | AQNTL=${newAqntl.toFixed(3)}s (${(60 / newAqntl).toFixed(1)} BPM)${xmlEvent.hasFermata ? ' 🎵FERMATA' : ''}`)
+        console.log(`[V5] ✓ M${xmlEvent.measure} B${xmlEvent.beat} → ${anchorTime.toFixed(3)}s | matched ${matchedCount}/${expectedCount} pitches=[${chord.notes.map(n => n.pitch)}] | AQNTL=${newAqntl.toFixed(3)}s (${(60 / newAqntl).toFixed(1)} BPM)`)
 
         return {
             ...state,
@@ -341,7 +315,7 @@ export function stepV5(
             currentEventIndex: nextIndex,
             lastAnchorTime: anchorTime,
             lastAnchorGlobalBeat: xmlEvent.globalBeat,
-            afterFermata: xmlEvent.hasFermata || false, // Enable fresh scanning after fermata
+            consecutiveMisses: 0, // Reset on successful match
             recentOutcomes: pushOutcome(state.recentOutcomes, 'match'),
             status: nextIndex >= xmlEvents.length ? 'done' : 'running',
         }
@@ -382,57 +356,9 @@ export function stepV5(
                 currentEventIndex: nextIndex,
                 lastAnchorTime: anchorTime,
                 lastAnchorGlobalBeat: xmlEvent.globalBeat,
+                consecutiveMisses: 0, // Reset on match
                 recentOutcomes: pushOutcome(state.recentOutcomes, 'match'),
                 status: nextIndex >= xmlEvents.length ? 'done' : 'running',
-            }
-        }
-
-        // ─── FERMATA HANDLING ───
-        // If current event has a fermata and normal scanning failed:
-        // Dead-reckon this beat, then do a fresh scan for the NEXT event's pitches
-        // starting from the dead-reckoned time (like finding the first note again)
-        if (xmlEvent.hasFermata && state.currentEventIndex + 1 < xmlEvents.length) {
-            const deadReckonTime = state.lastAnchorTime + expectedDelta
-            const nextIdx = state.currentEventIndex + 1
-            const nextEvent = xmlEvents[nextIdx]
-
-            // Fresh scan: search for next event's pitches starting from dead-reckoned time
-            const freshMatch = findFirstPitchMatch(nextEvent.pitches, sorted, state.midiCursor)
-
-            if (freshMatch && freshMatch.time >= deadReckonTime - 0.5) {
-                // Found the note after the fermata!
-                const chordThreshold = Math.max(0.100, state.aqntl * state.chordThresholdFraction)
-                const chord = extractChord(nextEvent.pitches, sorted, freshMatch.index, freshMatch.time, chordThreshold)
-
-                // Place dead-reckoned anchor for the fermata beat
-                const newAnchors = [...state.anchors]
-                const newBeatAnchors = [...state.beatAnchors]
-                const isNewMeasureFermata = state.anchors.length === 0 || state.anchors[state.anchors.length - 1].measure !== xmlEvent.measure
-                if (isNewMeasureFermata) newAnchors.push({ measure: xmlEvent.measure, time: deadReckonTime })
-                if (xmlEvent.beat > 1.01) newBeatAnchors.push({ measure: xmlEvent.measure, beat: xmlEvent.beat, time: deadReckonTime })
-
-                // Place anchor for the next event (post-fermata)
-                const isNewMeasureNext = newAnchors[newAnchors.length - 1].measure !== nextEvent.measure
-                if (isNewMeasureNext) newAnchors.push({ measure: nextEvent.measure, time: freshMatch.time })
-                if (nextEvent.beat > 1.01) newBeatAnchors.push({ measure: nextEvent.measure, beat: nextEvent.beat, time: freshMatch.time })
-
-                const advancedIndex = nextIdx + 1
-
-                console.log(`[V5] 🎵 Fermata at M${xmlEvent.measure} B${xmlEvent.beat} → dead-reckon ${deadReckonTime.toFixed(3)}s, then fresh match M${nextEvent.measure} B${nextEvent.beat} → ${freshMatch.time.toFixed(3)}s`)
-
-                return {
-                    ...state,
-                    anchors: newAnchors,
-                    beatAnchors: newBeatAnchors,
-                    ghostAnchor: null,
-                    aqntl: state.aqntl, // Preserve AQNTL — don't let fermata corrupt it
-                    midiCursor: chord.lastIndex + 1,
-                    currentEventIndex: advancedIndex,
-                    lastAnchorTime: freshMatch.time,
-                    lastAnchorGlobalBeat: nextEvent.globalBeat,
-                    recentOutcomes: pushOutcome(state.recentOutcomes, 'match'),
-                    status: advancedIndex >= xmlEvents.length ? 'done' : 'running',
-                }
             }
         }
 
@@ -476,6 +402,7 @@ export function stepV5(
                     beatAnchors: newBeatAnchors,
                     ghostAnchor: null,
                     recentOutcomes: outcomes,
+                    consecutiveMisses: state.consecutiveMisses + 1,
                     currentEventIndex: nextIndex,
                     lastAnchorTime: deadReckonTime,
                     lastAnchorGlobalBeat: xmlEvent.globalBeat,
