@@ -12,6 +12,8 @@
             ".git",
             "pnpm-lock.yaml",
             "*.xml",
+            "*.musicxml",
+            "*.mid",
             "score-repomix-output.xml",
             "synth-repomix-output.xml",
             "repomix-output.xml",

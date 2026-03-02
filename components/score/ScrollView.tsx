@@ -134,6 +134,7 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
         const newBeatXMap = new Map<number, Map<number, number>>()
 
         const xmlEventsList: XMLEvent[] = []
+        let cumulativeBeats = 0 // Running global beat counter for V5
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         measureList.forEach((staves: any[], index: number) => {
@@ -143,6 +144,8 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
 
             const beatPositions = new Map<number, number>()
             const uniqueFractionalBeats = new Set<number>()
+            // V5: per-beat accumulator for pitches and smallest duration
+            const beatAccumulator = new Map<number, { pitches: Set<number>, smallestDur: number }>()
 
             if (staves.length > 0) {
                 const pos = staves[0].PositionAndShape
@@ -201,17 +204,53 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                             const absX = (staffMeasure.PositionAndShape.AbsolutePosition.x + relX) * unitInPixels;
                             // Map the exact fractional beat directly to the pixel coordinates!
                             beatPositions.set(beatVal, absX);
+
+                            // V5: Collect pitches and note lengths per beat position
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            entry.graphicalVoiceEntries?.forEach((gve: any) => {
+                                if (!gve.notes) return;
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                gve.notes.forEach((n: any) => {
+                                    if (!n.sourceNote || !n.sourceNote.Pitch) return;
+                                    const pitch = n.sourceNote.Pitch;
+                                    // Convert OSMD Pitch to MIDI number: (octave+1)*12 + halfTone
+                                    const midiPitch = (pitch.Octave + 1) * 12 + pitch.getHalfTone();
+                                    // Get note duration in quarter-note fractions
+                                    const durQuarters = n.sourceNote.Length?.RealValue
+                                        ? n.sourceNote.Length.RealValue * 4 // RealValue is in whole notes
+                                        : 1; // default to quarter note
+
+                                    if (!beatAccumulator.has(beatVal)) {
+                                        beatAccumulator.set(beatVal, { pitches: new Set(), smallestDur: durQuarters });
+                                    }
+                                    const acc = beatAccumulator.get(beatVal)!;
+                                    acc.pitches.add(midiPitch);
+                                    if (durQuarters < acc.smallestDur) acc.smallestDur = durQuarters;
+                                });
+                            });
                         });
                     });
 
                     newBeatXMap.set(measureNumber, beatPositions)
 
-                    // Add to chronological XML Events List for V4 Mapper
+                    // Build chronological XML Events List with V5 enrichment
                     const sortedBeats = Array.from(uniqueFractionalBeats).sort((a, b) => a - b);
-                    sortedBeats.forEach(b => xmlEventsList.push({ measure: measureNumber, beat: b }));
+                    sortedBeats.forEach(b => {
+                        const acc = beatAccumulator.get(b);
+                        xmlEventsList.push({
+                            measure: measureNumber,
+                            beat: b,
+                            globalBeat: cumulativeBeats + (b - 1), // beat 1 of measure = cumulativeBeats + 0
+                            pitches: acc ? Array.from(acc.pitches) : [],
+                            smallestDuration: acc ? acc.smallestDur : 1,
+                        });
+                    });
 
                 } catch { /* ignore */ }
             }
+
+            // V5: advance cumulative beat counter by this measure's beat count
+            cumulativeBeats += numerator
 
             const measureNotes: NoteData[] = []
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

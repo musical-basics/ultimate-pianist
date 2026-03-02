@@ -12,7 +12,7 @@ import { ScoreControls } from '@/components/score/ScoreControls'
 import { useAppStore } from '@/lib/store'
 import { getPlaybackManager } from '@/lib/engine/PlaybackManager'
 import { parseMidiFile } from '@/lib/midi/parser'
-import type { SongConfig, ParsedMidi, BeatAnchor, XMLEvent } from '@/lib/types'
+import type { SongConfig, ParsedMidi, BeatAnchor, XMLEvent, V5MapperState } from '@/lib/types'
 import { fetchConfigById, updateConfigAction } from '@/app/actions/config'
 
 export default function AdminEditor() {
@@ -31,6 +31,7 @@ export default function AdminEditor() {
     const [totalMeasures, setTotalMeasures] = useState(0)
     const [noteCounts, setNoteCounts] = useState<Map<number, number>>(new Map())
     const [xmlEvents, setXmlEvents] = useState<XMLEvent[]>([])
+    const [v5State, setV5State] = useState<V5MapperState | null>(null)
 
     const anchors = useAppStore((s) => s.anchors)
     const beatAnchors = useAppStore((s) => s.beatAnchors)
@@ -349,6 +350,84 @@ export default function AdminEditor() {
         }
     }, [parsedMidi, xmlEvents, totalMeasures, config?.audio_url, setAnchors, setBeatAnchors, setIsLevel2Mode]);
 
+    // V5: Echolocation Interactive Mapper
+    const handleStartV5 = useCallback(async (chordThresholdFraction: number) => {
+        if (!parsedMidi) { alert('Please load a MIDI file first.'); return; }
+        if (totalMeasures === 0 || xmlEvents.length === 0) { alert('Please wait for score to process.'); return; }
+
+        setIsAiMapping(true);
+        try {
+            const { initV5, stepV5, getAudioOffset } = await import('@/lib/engine/AutoMapperV5');
+            const audioOffset = await getAudioOffset(config?.audio_url || null);
+
+            let state = initV5(parsedMidi.notes, xmlEvents, audioOffset, chordThresholdFraction);
+
+            // Auto-run steps until paused or done
+            while (state.status === 'running') {
+                state = stepV5(state, parsedMidi.notes, xmlEvents);
+            }
+
+            setV5State(state);
+
+            if (state.status === 'done') {
+                setAnchors(state.anchors);
+                setBeatAnchors(state.beatAnchors);
+                setIsLevel2Mode(true);
+            } else if (state.status === 'paused') {
+                // Apply partial results so user sees progress on the score
+                setAnchors(state.anchors);
+                setBeatAnchors(state.beatAnchors);
+                setIsLevel2Mode(true);
+            }
+        } catch (err) {
+            console.error('[V5 Error]', err);
+            alert('V5 mapping failed (check console).');
+        } finally {
+            setIsAiMapping(false);
+        }
+    }, [parsedMidi, xmlEvents, totalMeasures, config?.audio_url, setAnchors, setBeatAnchors, setIsLevel2Mode]);
+
+    const handleConfirmGhost = useCallback(async () => {
+        if (!v5State || v5State.status !== 'paused' || !v5State.ghostAnchor || !parsedMidi) return;
+
+        const { confirmGhost, stepV5 } = await import('@/lib/engine/AutoMapperV5');
+        let state = confirmGhost(v5State, v5State.ghostAnchor.time);
+
+        // Continue stepping after confirm
+        while (state.status === 'running') {
+            state = stepV5(state, parsedMidi.notes, xmlEvents);
+        }
+
+        setV5State(state);
+        setAnchors(state.anchors);
+        setBeatAnchors(state.beatAnchors);
+    }, [v5State, parsedMidi, xmlEvents, setAnchors, setBeatAnchors]);
+
+    const handleProceedMapping = useCallback(async () => {
+        // Same as confirm — confirm at current ghost time, then continue
+        await handleConfirmGhost();
+    }, [handleConfirmGhost]);
+
+    const handleRunV5ToEnd = useCallback(async () => {
+        if (!v5State || !parsedMidi) return;
+
+        const { runV5ToEnd } = await import('@/lib/engine/AutoMapperV5');
+        const finalState = runV5ToEnd(v5State, parsedMidi.notes, xmlEvents);
+
+        setV5State(finalState);
+        setAnchors(finalState.anchors);
+        setBeatAnchors(finalState.beatAnchors);
+        setIsLevel2Mode(true);
+    }, [v5State, parsedMidi, xmlEvents, setAnchors, setBeatAnchors, setIsLevel2Mode]);
+
+    const handleUpdateGhostTime = useCallback((time: number) => {
+        if (!v5State || !v5State.ghostAnchor) return;
+        setV5State({
+            ...v5State,
+            ghostAnchor: { ...v5State.ghostAnchor, time },
+        });
+    }, [v5State]);
+
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
             const tag = (e.target as HTMLElement)?.tagName
@@ -397,6 +476,12 @@ export default function AdminEditor() {
                 onClearAll={handleClearAll}
                 onAutoMap={handleAutoMap}
                 onAutoMapV4={handleAutoMapV4}
+                onAutoMapV5={handleStartV5}
+                onConfirmGhost={handleConfirmGhost}
+                onProceedMapping={handleProceedMapping}
+                onRunV5ToEnd={handleRunV5ToEnd}
+                onUpdateGhostTime={handleUpdateGhostTime}
+                v5State={v5State}
                 isAiMapping={isAiMapping}
             />
 

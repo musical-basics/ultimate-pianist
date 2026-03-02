@@ -53,6 +53,34 @@ export interface BeatAnchor {
 export interface XMLEvent {
     measure: number
     beat: number
+    /** Cumulative beat position from start of piece (for beatsElapsed calc across measures) */
+    globalBeat: number
+    /** MIDI pitch numbers expected at this beat (e.g. [57, 64] for A3+E4 chord) */
+    pitches: number[]
+    /** Smallest note duration in quarter-note fractions (1=quarter, 0.5=eighth, 0.25=16th, 0.125=32nd) */
+    smallestDuration: number
+}
+
+/** Interactive V5 mapper state machine */
+export interface V5MapperState {
+    status: 'idle' | 'running' | 'paused' | 'done'
+    /** How far through the xmlEvents array we've mapped */
+    currentEventIndex: number
+    /** Confirmed anchors so far */
+    anchors: Anchor[]
+    beatAnchors: BeatAnchor[]
+    /** Ghost anchor placed when a match fails — user must confirm/adjust */
+    ghostAnchor: { measure: number; beat: number; time: number } | null
+    /** Current average quarter-note time length in seconds */
+    aqntl: number
+    /** MIDI cursor position (index into sorted notes) */
+    midiCursor: number
+    /** User-chosen chord cluster threshold fraction (default 0.0625 = 64th note) */
+    chordThresholdFraction: number
+    /** Time of last confirmed anchor in seconds */
+    lastAnchorTime: number
+    /** Global beat of last confirmed anchor */
+    lastAnchorGlobalBeat: number
 }
 
 /** A full song configuration (stored in DB) */
