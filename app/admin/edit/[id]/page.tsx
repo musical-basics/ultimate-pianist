@@ -529,7 +529,7 @@ export default function AdminEditor() {
                         <ScoreControls
                             revealMode={revealMode} darkMode={darkMode} highlightNote={highlightNote}
                             glowEffect={glowEffect} popEffect={popEffect} jumpEffect={jumpEffect}
-                            isLocked={isLocked} showCursor={showCursor}
+                            isLocked={isLocked} showCursor={showCursor} isAdmin={true}
                             onRevealModeChange={setRevealMode} onDarkModeToggle={() => setDarkMode(!darkMode)}
                             onHighlightToggle={() => setHighlightNote(!highlightNote)} onGlowToggle={() => setGlowEffect(!glowEffect)}
                             onPopToggle={() => setPopEffect(!popEffect)} onJumpToggle={() => setJumpEffect(!jumpEffect)}

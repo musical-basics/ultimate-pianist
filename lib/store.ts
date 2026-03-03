@@ -28,6 +28,7 @@ interface AppStore {
     glowEffect: boolean
     popEffect: boolean
     jumpEffect: boolean
+    previewEffects: boolean
     isLocked: boolean
     cursorPosition: number
     curtainLookahead: number
@@ -58,6 +59,7 @@ interface AppStore {
     setGlowEffect: (glow: boolean) => void
     setPopEffect: (pop: boolean) => void
     setJumpEffect: (jump: boolean) => void
+    setPreviewEffects: (preview: boolean) => void
     setIsLocked: (locked: boolean) => void
     setCursorPosition: (pos: number) => void
     setCurtainLookahead: (lookahead: number) => void
@@ -91,6 +93,7 @@ export const useAppStore = create<AppStore>((set) => ({
     glowEffect: true,
     popEffect: false,
     jumpEffect: true,
+    previewEffects: false,
     isLocked: true,
     cursorPosition: 0.2,
     curtainLookahead: 0.25,
@@ -132,6 +135,7 @@ export const useAppStore = create<AppStore>((set) => ({
     setGlowEffect: (glowEffect) => set({ glowEffect }),
     setPopEffect: (popEffect) => set({ popEffect }),
     setJumpEffect: (jumpEffect) => set({ jumpEffect }),
+    setPreviewEffects: (previewEffects) => set({ previewEffects }),
     setIsLocked: (isLocked) => set({ isLocked }),
     setCursorPosition: (cursorPosition) => set({ cursorPosition }),
     setCurtainLookahead: (curtainLookahead) => set({ curtainLookahead }),

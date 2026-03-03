@@ -5,6 +5,7 @@ import { useRef, useEffect, useCallback, useState, memo } from 'react'
 import { useOSMD } from '@/hooks/useOSMD'
 import { getPlaybackManager } from '@/lib/engine/PlaybackManager'
 import type { Anchor, BeatAnchor, XMLEvent } from '@/lib/types'
+import { useAppStore } from '@/lib/store'
 
 interface ScrollViewProps {
     xmlUrl: string | null
@@ -581,7 +582,8 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
             lastMeasureIndexRef.current = currentMeasureIndex
 
             const notesInMeasure = noteMap.current.get(measure)
-            if (notesInMeasure && !isAdmin) {
+            const previewEffects = useAppStore.getState().previewEffects
+            if (notesInMeasure && (!isAdmin || previewEffects)) {
                 let globalProgress = progress
                 if (isBeatInterpolation && beatXMapRef.current.has(measure)) {
                     globalProgress = ((beat - 1) + progress) / beatXMapRef.current.get(measure)!.size

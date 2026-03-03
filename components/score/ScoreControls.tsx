@@ -17,9 +17,11 @@ import {
     ArrowUpFromDot,
     Monitor,
     Crosshair,
+    Play,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useAppStore } from '@/lib/store'
 
 interface ScoreControlsProps {
     revealMode: 'OFF' | 'NOTE' | 'CURTAIN'
@@ -30,6 +32,7 @@ interface ScoreControlsProps {
     jumpEffect: boolean
     isLocked: boolean
     showCursor: boolean
+    isAdmin?: boolean
     onRevealModeChange: (mode: 'OFF' | 'NOTE' | 'CURTAIN') => void
     onDarkModeToggle: () => void
     onHighlightToggle: () => void
@@ -50,6 +53,7 @@ export const ScoreControls: React.FC<ScoreControlsProps> = ({
     jumpEffect,
     isLocked,
     showCursor,
+    isAdmin = false,
     onRevealModeChange,
     onDarkModeToggle,
     onHighlightToggle,
@@ -60,6 +64,8 @@ export const ScoreControls: React.FC<ScoreControlsProps> = ({
     onCursorToggle,
     onDetach,
 }) => {
+    const previewEffects = useAppStore((s) => s.previewEffects)
+    const setPreviewEffects = useAppStore((s) => s.setPreviewEffects)
     const bg = darkMode ? 'bg-zinc-800/80 border-zinc-700' : 'bg-white/80 border-zinc-200'
 
     return (
@@ -107,6 +113,23 @@ export const ScoreControls: React.FC<ScoreControlsProps> = ({
                 className={cn('h-7 px-2', jumpEffect ? 'text-pink-400' : darkMode ? 'text-zinc-500' : 'text-zinc-400')}>
                 <ArrowUpFromDot className="w-3.5 h-3.5" />
             </Button>
+
+            {/* Preview toggle — admin only */}
+            {isAdmin && (
+                <>
+                    <div className={`w-px h-5 ${darkMode ? 'bg-zinc-600' : 'bg-zinc-300'} mx-1`} />
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPreviewEffects(!previewEffects)}
+                        title={previewEffects ? 'Preview ON — effects visible on admin' : 'Preview OFF — effects hidden on admin'}
+                        className={cn('h-7 px-2 text-xs gap-1', previewEffects ? 'text-emerald-400' : darkMode ? 'text-zinc-500' : 'text-zinc-400')}
+                    >
+                        <Play className="w-3 h-3" />
+                        <span className="hidden sm:inline">Preview</span>
+                    </Button>
+                </>
+            )}
 
             <div className={`w-px h-5 ${darkMode ? 'bg-zinc-600' : 'bg-zinc-300'} mx-1`} />
 
